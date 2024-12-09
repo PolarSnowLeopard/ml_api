@@ -1,0 +1,11 @@
+flask
+flask-restx
+numpy
+pandas
+scikit-learn
+matplotlib
+seaborn
+joblib
+jinja2
+python-dateutil
+requests

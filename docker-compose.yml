@@ -1,0 +1,45 @@
+version: '3'
+
+services:
+  ml-api:
+    build: .
+    ports:
+      - "5010:5000"
+    volumes:
+      - ./saved_models:/app/saved_models
+      - ./saved_datasets:/app/saved_datasets
+      - ./logs:/app/logs
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+      - WORKERS=4
+      - TIMEOUT=120
+      - MAX_REQUESTS=1000
+    restart: unless-stopped
+    command: >
+      gunicorn
+      --workers=${WORKERS}
+      --timeout=${TIMEOUT}
+      --max-requests=${MAX_REQUESTS}
+      --bind=0.0.0.0:5000
+      --access-logfile=/app/logs/access.log
+      --error-logfile=/app/logs/error.log
+      app:app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M 
