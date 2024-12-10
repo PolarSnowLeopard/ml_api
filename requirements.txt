@@ -9,3 +9,5 @@ joblib
 jinja2
 python-dateutil
 requests
+neo4j-driver
+python-dotenv

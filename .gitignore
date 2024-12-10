@@ -3,3 +3,17 @@
 /saved_datasets
 /logs
 .env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虚拟环境
+venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/

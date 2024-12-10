@@ -18,19 +18,20 @@
 
 ```
 .
-├── README.md              # 项目文档
-├── requirements.txt       # 依赖包列表
-├── app.py                # 主应用程序
-├── saved_models/         # 模型存储目录
-│   ├── <model_id>        # 模型文件
-│   └── <model_id>.meta   # 模型元数据
-└── saved_datasets/       # 数据集存储目录
-    ├── built_in_iris     # 内置数据集
-    ├── built_in_iris.meta
-    ├── built_in_breast_cancer
-    ├── built_in_breast_cancer.meta
-    ├── <dataset_id>      # 用户上传的数据集
-    └── <dataset_id>.meta # 数据集元数据
+├── app.py                 # Flask应用主文件，包含所有API端点
+├── requirements.txt       # Python依赖包列表
+├── README.md             # 项目说明文档
+├── Dockerfile            # Docker构建文件
+├── docker-compose.yml    # Docker Compose配置文件
+│
+├── docs/                    # 文档目录
+│   ├── API文档.md            # API详细文档
+│   ├── doc_new.md           # API文档更新版本
+│   ├── doc_updated.md   	  # API文档最新版本
+│   └── 基于服务的元应用示例.md  # API使用示例
+│
+└── scripts/             # 工具脚本目录
+    └── create_graph.py  # Neo4j图数据库创建脚本
 ```
 
 ## 安装
@@ -549,7 +550,7 @@ requests.delete(f'http://localhost:5000/models/{model_id}')
    ```bash
    # 基本运行方式
    sudo docker run -d -p 5010:5000 --name ml-api ml-api:latest
-
+   
    # 如果需要持久化存储模型和数据集，使用卷挂载
    sudo docker run -d \
        -p 5010:5000 \
@@ -637,7 +638,7 @@ requests.delete(f'http://localhost:5000/models/{model_id}')
 
 3. **性能优化**
    - 使用gunicorn作为WSGI服务器
-   - 工作进程数：4（可通过WORKERS环境变量调整）
+   - 工作进程数：1（可通过WORKERS环境变量调整）
    - 请求超时：120秒
    - 最大请求数：1000（达到后工作进程会重启）
 
@@ -662,4 +663,94 @@ requests.delete(f'http://localhost:5000/models/{model_id}')
    - 检查卷挂载：`sudo docker inspect ml-api`
    - 确保目录权限正确：`sudo chown -R 1000:1000 saved_models saved_datasets`
    - 检查磁盘空间和inode使用情况
-``` 
+
+## 图数据库设计
+
+本项目使用 Neo4j 图数据库来存储和管理 API 之间的关系，便于分析和可视化 API 的依赖结构。
+
+### 节点类型
+
+1. **API节点**
+   - 属性：name, method, path
+   - 示例：`{name: 'GET /datasets', method: 'GET', path: '/datasets'}`
+
+2. **类别节点**
+   - 属性：name
+   - 三个主要类别：
+     * 数据准备
+     * 模型管理
+     * 报告生成
+
+3. **元应用节点**
+   - 属性：name, description
+   - 四种元应用：
+     * 模型评估元应用：用于评估模型性能的基础应用
+     * 模型应用元应用：包含数据集选择、模型选择、评估、预测和数据集上传的完整应用流程
+     * 模型构建-报告生成元应用：包含除删除操作外的所有功能的完整流程
+     * 管理元应用：用于管理数据集和模型的基础操作
+
+### 关系类型
+
+1. **REQUIRED_BY**
+   - 连接 API 节点之间的依赖关系
+   - A-[REQUIRED_BY]->B 表示 B 依赖 A（调用 B 之前需要先调用 A）
+
+2. **BELONGS_TO**
+   - 连接 API 节点和类别节点
+   - API-[BELONGS_TO]->Category
+
+3. **USES**
+   - 连接元应用节点和 API 节点
+   - MetaApp-[USES]->API
+
+### 图数据库配置
+
+配置信息存储在 `.env` 文件中：
+```
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=your_password
+```
+
+### 常用查询示例
+
+1. 查询特定元应用及其相关 API：
+```cypher
+MATCH (meta:MetaApp {name: '模型评估元应用'})-[:USES]->(api:API)
+WITH meta, collect(api) as apis
+MATCH path = (a:API)-[r:REQUIRED_BY]->(b:API)
+WHERE a IN apis AND b IN apis
+RETURN meta, apis, collect(path)
+```
+
+2. 查询某个 API 的所有依赖：
+```cypher
+MATCH path = (a:API)-[:REQUIRED_BY*]->(target:API {name: 'POST /predict'})
+RETURN path
+```
+
+### 核心组件说明
+
+1. **API服务 (app.py)**
+   - REST API的所有端点实现
+   - 数据集和模型的管理逻辑
+   - 训练、预测、评估等核心功能
+   - 错误处理和日志记录
+
+2. **文档系统 (docs/)**
+   - API详细说明文档
+   - 使用示例和最佳实践
+   - API版本历史记录
+   - 元应用场景示例
+
+3. **数据存储**
+   - 运行时自动创建的目录：
+     * saved_models/: 训练好的模型文件
+     * saved_datasets/: 上传的数据集文件
+     * logs/: 应用日志文件
+
+4. **图数据库支持 (scripts/)**
+   - `create_graph.py`: 构建API关系图
+   - 支持Neo4j可视化和查询
+   - 元应用场景管理
+
